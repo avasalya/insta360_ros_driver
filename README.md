@@ -72,7 +72,44 @@ sudo chmod 777 /dev/insta
 ```
 
 ## Usage
-The camera provides images natively in H264 compressed image format. We have a decoder node that 
+The camera provides images natively in `H.264` or `H.264_cuvid` compressed image format. We have a decoder node that 
+
+## Dynamic Runtime Configurations
+
+The `image_decoder` node supports runtime parameters, allowing you to optimize performance, toggle frame drop thresholds, and hot-swap between software and hardware-accelerated video decoders directly from the XML launch configuration without re-compiling the C++ binaries.
+
+### Configuring the Decoder via Launch File
+
+Open your `bringup.launch.xml` file and locate the `image_decoder` node definition block. You can change your targeted decoder backend by updating the value of the `decoder_name` parameter string:
+
+```xml
+    <!-- Decodes Compressed Images -->
+    <node pkg="insta360_ros_driver" exec="decoder" name="image_decoder" output="log">
+        <param name="compressed_topic" value="/dual_fisheye/image/compressed"/>
+        <param name="uncompressed_topic" value="/dual_fisheye/image"/>
+        <param name="skip_frame" value="2"/>
+        <!-- If you want to minimize the CPU load the most, you can decode only the i-frames. But the expected FPS is about 1-2 FPS -->
+        <param name="i_frame_only" value="false"/> 
+        <param name="decoder_name" value="h264_cuvid"/>
+        <!-- possile decoder h264_cuvid, h264, hevc?, mjpeg? -->
+    </node>
+```
+
+### Supported Decoder Configuration Values
+
+| `decoder_name` String | Performance Mode | Hardware Requirement / Target Platform |
+| :--- | :--- | :--- |
+| **`h264`** | CPU Software Parsing | Stable baseline for all setups; ignores NVDEC packet initialization constraints. |
+| **`h264_cuvid`** *(Default)*  | GPU NVDEC Accelerated | Requires **NVIDIA Turing Architecture or newer** (RTX 20-series, GTX 16-series, Quadro RTX, Ampere, Ada). *seems to be working on 1080 Ti sometimes, may cause header deadlock loops.* |
+
+### Running the Environment
+
+Once your preferred codec string parameter is updated in the launch file, simply execute the entry target task block within your virtualized Pixi environment container:
+
+```bash
+pixi run -e jazzy360 ros2 launch insta360_ros_driver bringup.launch.xml
+```
+
 
 ### Camera Bringup
 The camera can be brought up with the following launch file
