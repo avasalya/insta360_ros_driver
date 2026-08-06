@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.5)
 project(insta360_ros_driver)
 
+# Add aggressive CPU optimizations
+add_compile_options(-O3 -march=native -ffast-math)
+
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
@@ -81,9 +84,12 @@ target_link_libraries(equirectangular_cpp ${OpenCV_LIBRARIES})
 
 ament_target_dependencies(equirectangular_cpp
   rclcpp
+  sensor_msgs
   cv_bridge
   OpenCV
 )
+
+rclcpp_components_register_node(equirectangular_cpp PLUGIN "EquirectangularNode" EXECUTABLE equirectangular_node)
 
 # Perspective Node
 add_executable(perspective_cpp src/perspective.cpp)

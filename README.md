@@ -1,6 +1,6 @@
 # CHANGES OF THIS FORK
+- Equirectangular node: optimized projection memory/speed and correct camera alignment.
 - Dynamic parameters change works correctly (no more hardcoded resolution & decoder type, configure via ROS parameter layer).
-- Equirectangular node is now more efficient
 - Perspective node have been added. You can control fov through parameters and camera orientation by publishing to: /&#8288;camera_orientation/&#8288;quaternion
 
 # Insta360 ROS2 Jazzy Driver with Pixi Environment
@@ -133,8 +133,24 @@ A dual fisheye image will be published.
 The launch file has the following optional arguments:
 - equirectangular (default="false")
 
-This publishes equirectangular images. You can configure these parameters in `config/equirectangular.yaml`.
-![equirectangular](docs/equirectangular.png)
+This publishes equirectangular images with (front lens as center of the frame). if you want rear lens to be at the center then look for lines.
+```cpp
+// To make front lense appear on the center of the equirectangular image.
+// Shifted by +PI to rotate the panorama 180 degrees horizontally
+float lon = ((float)x / out_width_) * 2.0f * M_PI;
+
+// To make rear lense appear on the center of the equirectangular image.
+// float lon = ((float)x / out_width_) * 2.0f * M_PI - M_PI;
+```
+
+in
+
+```bash
+src/insta360_ros_driver/src/equirectangular.cpp
+```
+
+You can configure these parameters in `config/equirectangular.yaml`.
+![equirectangular](docs/equirectangular.jpg)
 
 - imu_filter (default="true")
 
@@ -165,12 +181,12 @@ equirectangular_node:
   ros__parameters:
     cx_offset: 0.0
     cy_offset: 0.0
-    crop_size: 960
     translation: [0.0, 0.0, -0.105]
     rotation_deg: [-0.5, 0.0, 1.1]
     gpu: True
-    out_width: 1920
-    out_height: 960
+    out_width: 2304
+    out_height: 1150
+    crop_size: 1150
 ==================================================
 ```
 
@@ -178,7 +194,3 @@ Note that decode.py will most likely drop frames depending on your system. If yo
 ```
 ros2 bag record /dual_fisheye/image /imu/data_raw
 ```
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=ai4ce/insta360_ros_driver&type=Date)](https://star-history.com/#ai4ce/insta360_ros_driver&Date)

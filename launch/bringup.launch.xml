@@ -1,8 +1,16 @@
 <?xml version="1.0"?>
 <launch>
-    <arg name="equirectangular" default="false"/>
+    <arg name="equirectangular" default="true"/>
     <arg name="perspective" default="false"/>
     <arg name="imu_filter" default="false"/>
+
+    <!-- 1. Default fallback baseline if everything is disabled -->
+    <let name="view_topic" value="/dual_fisheye/image"/>
+    <!-- 2. Overwrite with equirectangular if enabled -->
+    <let if="$(var equirectangular)" name="view_topic" value="/equirectangular/image"/>
+    <!-- 3. Final priority override: perspective always takes precedence if true -->
+    <let if="$(var perspective)" name="view_topic" value="/perspective/image"/>
+
     <arg name="equirectangular_config" default="$(find-pkg-share insta360_ros_driver)/config/equirectangular.yaml"/>
     <arg name="perspective_config" default="$(find-pkg-share insta360_ros_driver)/config/perspective.yaml"/>
     <arg name="imu_config" default="$(find-pkg-share insta360_ros_driver)/config/imu_filter.yaml"/>
@@ -41,8 +49,12 @@
     </node>
     <!-- Automatically open a GUI window to visualize the perspective video stream -->
     <node pkg="image_view" exec="image_view" name="live_viewer" output="screen">
+        <remap from="image" to="$(var view_topic)"/>
         <!-- <remap from="image" to="/perspective/image"/> -->
-        <remap from="image" to="/dual_fisheye/image"/>
+        <!-- <remap from="image" to="/dual_fisheye/image"/> -->
+        <!-- <remap from="image" to="/equirectangular/image"/> -->
+    <!-- Dynamic Topic Selection: Evaluates fallback logic automatically -->
+
     </node>
 
 </launch>
