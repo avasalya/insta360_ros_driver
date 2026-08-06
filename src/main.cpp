@@ -97,6 +97,7 @@ public:
 
     ~CameraWrapper() {
         if (cam) {
+            cam->StopLiveStreaming(); // prevents from hanging on timeout to wait for synchronize" during Open().
             cam->Close();
         }
     }
