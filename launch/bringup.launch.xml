@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <launch>
-    <arg name="equirectangular" default="true"/>
-    <arg name="perspective" default="false"/>
+    <arg name="equirectangular" default="false"/>
+    <arg name="perspective" default="true"/>
     <arg name="imu_filter" default="false"/>
 
     <!-- 1. Default fallback baseline if everything is disabled -->

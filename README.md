@@ -1,11 +1,11 @@
 # CHANGES OF THIS FORK
+- Pespective node has been optimized for map generation and eliminate runtime freezing.
 - Equirectangular node: optimized projection memory/speed and correct camera alignment.
 - Dynamic parameters change works correctly (no more hardcoded resolution & decoder type, configure via ROS parameter layer).
-- Perspective node have been added. You can control fov through parameters and camera orientation by publishing to: /&#8288;camera_orientation/&#8288;quaternion
 
 # Insta360 ROS2 Jazzy Driver with Pixi Environment
 
-A ROS driver for the Insta360 cameras. This driver is tested on Ubuntu 24.04 with ROS2 Jazzy. The driver has also been verified on the Insta360 X2 and X3 cameras. The following resolutions are available, all at 30 FPS.
+A ROS driver for the Insta360 cameras. This driver is tested on Ubuntu 24.04 with ROS2 Jazzy on old classic RTX1080Ti. The driver has also been verified on the Insta360 X2 and X3 cameras. The following resolutions are available, all at 30 FPS.
 - 3840 x 1920
 - 2560 x 1280
 - 2304 x 1152
@@ -25,7 +25,7 @@ To use this driver, you need the latest Insta360 SDK (post-April 23, 2025), whic
 > ⚠️ **Note:** Do not manually clone or build this submodule directly. This package is managed within a `pixi` ecosystem to avoid environment conflicts. Also Please make you use the latest SDK. This package works with the SDK posted after April 23, 2025**
 
 
-Please follow the installation guide in the **[parent repository](https://github.com/avasalya/pixi_insta360_ros2_jazzy_driver)**.
+## Please follow the installation guide in the **[parent repository](https://github.com/avasalya/pixi_insta360_ros2_jazzy_driver)**.
 
 ```bash
 # Clone with submodules
@@ -119,7 +119,7 @@ ros2 launch insta360_ros_driver bringup.launch.xml
 ```
 ![bringup](docs/bringup_rqt.png)
 
-A dual fisheye image will be published.
+#### A dual fisheye image will be published automatically
 
 ![dual_fisheye](docs/dual_fisheye.png)
 
@@ -152,7 +152,27 @@ src/insta360_ros_driver/src/equirectangular.cpp
 You can configure these parameters in `config/equirectangular.yaml`.
 ![equirectangular](docs/equirectangular.jpg)
 
-- imu_filter (default="true")
+The launch file has the following optional arguments:
+- perspective (default="false")
+
+#### A Perspective image will be published.
+
+![perspective](docs/perspective.png)
+
+#### Published Topics
+- /camera_orientation/quaternion
+- /dual_fisheye/image
+- /dual_fisheye/image/compressed
+- /imu/data_raw
+- /output
+- /parameter_events
+- /perspective/image
+- /rosout
+
+
+## NOTE [below features are not tested/optimized yet from original source](https://github.com/ai4ce/insta360_ros_driver)
+
+#### imu_filter (default="true")
 
 This uses the [imu_filter_madgwick](https://wiki.ros.org/imu_filter_madgwick) package to approximate orientation from the IMU. Note that by default, we publish `/imu/data_raw` which only contains linear acceleration and angular velocity. The madgwick filter uses this information to publish orientation to `/imu/data`. You can configure the filter in `config/imu_filter.yaml`.
 
