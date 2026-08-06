@@ -1,5 +1,5 @@
 # CHANGES OF THIS FORK
-- Dynamic parameters change works correctly
+- Dynamic parameters change works correctly (no more hardcoded resolution & decoder type, configure via ROS parameter layer).
 - Equirectangular node is now more efficient
 - Perspective node have been added. You can control fov through parameters and camera orientation by publishing to: /&#8288;camera_orientation/&#8288;quaternion
 
