@@ -41,7 +41,7 @@ private:
     AVFrame* hw_frame_ = nullptr;
     AVFrame* sw_frame_ = nullptr;
     SwsContext* sws_ctx_ = nullptr;
-    cv::Mat bgr_frame_; 
+    cv::Mat bgr_frame_;
     AVBufferRef *hw_device_ctx_ = nullptr;
     enum AVHWDeviceType hw_type_ = AV_HWDEVICE_TYPE_NONE;
 
@@ -54,12 +54,12 @@ private:
     std::condition_variable queue_cv_;
     std::atomic<bool> stop_publisher_thread_{false};
     size_t max_queue_size_ = 10;
-    
+
     int skip_frame_ = 0;
     int frame_counter_ = 0;
     bool i_frame_only_ = false;
     std::string decoder_name_;
-    
+
     void InitFFmpegDecoder() {
         hw_type_ = AV_HWDEVICE_TYPE_CUDA;
 
@@ -169,6 +169,7 @@ private:
         if (ret < 0) {
             return;
         }
+        // RCLCPP_INFO(this->get_logger(), "FFmpeg Stream Dimensions: %d x %d", codec_ctx_->width, codec_ctx_->height);
 
         while (ret >= 0) {
             ret = avcodec_receive_frame(codec_ctx_, hw_frame_);
@@ -193,11 +194,11 @@ private:
                     frame_to_display->width, frame_to_display->height, (AVPixelFormat)frame_to_display->format,
                     frame_to_display->width, frame_to_display->height, AV_PIX_FMT_BGR24,
                     SWS_POINT, nullptr, nullptr, nullptr);
-                
+
                 if (!sws_ctx_) {
                     av_frame_unref(hw_frame_);
                     if (frame_to_display == sw_frame_) av_frame_unref(sw_frame_);
-                    return; 
+                    return;
                 }
                 bgr_frame_.create(frame_to_display->height, frame_to_display->width, CV_8UC3);
             }
@@ -213,12 +214,12 @@ private:
 
                 // Apply frame skipping after decoding
                 bool should_publish = true;
-                
+
                 if (skip_frame_ > 0 && !i_frame_only_) {
                     // Skip frame logic (only when not in i_frame_only mode)
                     should_publish = (frame_counter_++ % (skip_frame_ + 1) == 0);
                 }
-                
+
                 if (should_publish) {
                     cv::Mat frame_copy = bgr_frame_.clone();
                     {
@@ -230,7 +231,7 @@ private:
                     queue_cv_.notify_one();
                 }
             }
-            
+
             av_frame_unref(hw_frame_);
             if (frame_to_display == sw_frame_) {
                 av_frame_unref(sw_frame_);
@@ -289,7 +290,7 @@ private:
                                                 cur_data, static_cast<int>(remaining_size),
                                                 AV_NOPTS_VALUE, AV_NOPTS_VALUE, 0);
             if (bytes_parsed < 0) {
-                break; 
+                break;
             }
             cur_data += bytes_parsed;
             remaining_size -= bytes_parsed;
@@ -311,7 +312,7 @@ private:
 
 public:
     H264DecoderNode() : Node("h264_decoder_node") {
-                
+
         this->declare_parameter("compressed_topic", "/dual_fisheye/image/compressed");
         this->declare_parameter("uncompressed_topic", "/dual_fisheye/image");
         this->declare_parameter("skip_frame", 0);
@@ -329,13 +330,14 @@ public:
 
         publisher_ = this->create_publisher<sensor_msgs::msg::Image>(publish_topic, 10);
         publisher_thread_ = std::thread(&H264DecoderNode::PublisherThreadLoop, this);
-        
+
         InitFFmpegDecoder();
 
         RCLCPP_INFO(this->get_logger(), "%s Decoder Node initialized", decoder_name_.c_str());
         RCLCPP_INFO(this->get_logger(), "Subscribing to: %s", subscribe_topic.c_str());
         RCLCPP_INFO(this->get_logger(), "Publishing to: %s", publish_topic.c_str());
         RCLCPP_INFO(this->get_logger(), "Skip frame: %d, I-frame only: %s", skip_frame_, i_frame_only_ ? "true" : "false");
+
     }
 
     ~H264DecoderNode() {

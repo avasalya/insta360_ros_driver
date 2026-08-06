@@ -5,17 +5,18 @@
 
 # Insta360 ROS2 Jazzy Driver with Pixi Environment
 
-A ROS driver for the Insta360 cameras. This driver is tested on Ubuntu 22.04 with ROS2 Humble. The driver has also been verified on the Insta360 X2 and X3 cameras. The following resolutions are available, all at 30 FPS.
+A ROS driver for the Insta360 cameras. This driver is tested on Ubuntu 24.04 with ROS2 Jazzy. The driver has also been verified on the Insta360 X2 and X3 cameras. The following resolutions are available, all at 30 FPS.
 - 3840 x 1920
 - 2560 x 1280
 - 2304 x 1152
 - 1920 x 960
+- 1152 x 1152 (default)
 
-You can change [this line](https://github.com/avasalya/insta360_ros_driver/blob/65e9cef35152a7af368e8b1f063ce85e8780d2a1/src/main.cpp#L130) to edit the resolution.
+you can update `video_resolution` in parameter config file.
 
-```cpp
-param.video_resolution = ins_camera::VideoResolution::RES_1920_960P30; //Change this line to edit the resolution
-```
+```bash
+ src/insta360_ros_driver/launch/bringup.launch.xml
+ ```
 
 # Installation
 
@@ -28,11 +29,11 @@ Please follow the installation guide in the **[parent repository](https://github
 
 ```bash
 # Clone with submodules
-git clone --recurse-submodules https://github.com/avasalya/pixi_insta360_ros2_jazzy_driver 
+git clone --recurse-submodules https://github.com/avasalya/pixi_insta360_ros2_jazzy_driver
 cd pixi_insta360_ros2_jazzy_driver
 ```
 
-**Add dependencies:** 
+**Add dependencies:**
 Then, the Insta360 libraries need to be installed as follows:
 - add the <code>camera</code> and <code>stream</code> header files inside the <code>include</code> directory
 - add the <code>libCameraSDK.so</code> library under the <code>lib</code> directory.
@@ -43,7 +44,7 @@ Then, the Insta360 libraries need to be installed as follows:
 pixi run -e jazzy360 setup
 ```
 
-# Setup Insta360 Camera 
+# Setup Insta360 Camera
 
 **make sure the camera is set to dual-lens (360°) mode**
 
@@ -72,7 +73,7 @@ sudo chmod 777 /dev/insta
 ```
 
 ## Usage
-The camera provides images natively in `H.264` or `H.264_cuvid` compressed image format. We have a decoder node that 
+The camera provides images natively in `H.264` or `H.264_cuvid` compressed image format. We have a decoder node that
 
 ## Dynamic Runtime Configurations
 
@@ -89,7 +90,7 @@ Open your `bringup.launch.xml` file and locate the `image_decoder` node definiti
         <param name="uncompressed_topic" value="/dual_fisheye/image"/>
         <param name="skip_frame" value="2"/>
         <!-- If you want to minimize the CPU load the most, you can decode only the i-frames. But the expected FPS is about 1-2 FPS -->
-        <param name="i_frame_only" value="false"/> 
+        <param name="i_frame_only" value="false"/>
         <param name="decoder_name" value="h264_cuvid"/>
         <!-- possile decoder h264_cuvid, h264, hevc?, mjpeg? -->
     </node>
@@ -137,12 +138,12 @@ This publishes equirectangular images. You can configure these parameters in `co
 
 - imu_filter (default="true")
 
-This uses the [imu_filter_madgwick](https://wiki.ros.org/imu_filter_madgwick) package to approximate orientation from the IMU. Note that by default, we publish `/imu/data_raw` which only contains linear acceleration and angular velocity. The madgwick filter uses this information to publish orientation to `/imu/data`. You can configure the filter in `config/imu_filter.yaml`. 
+This uses the [imu_filter_madgwick](https://wiki.ros.org/imu_filter_madgwick) package to approximate orientation from the IMU. Note that by default, we publish `/imu/data_raw` which only contains linear acceleration and angular velocity. The madgwick filter uses this information to publish orientation to `/imu/data`. You can configure the filter in `config/imu_filter.yaml`.
 
 ![IMU](https://github.com/user-attachments/assets/02b50cad-8415-4dde-9014-9ab3a4d415b9)
 
 ## Equirectangular Calibration
-You can adjust the extrinsic parameters used to improve the equirectangular image. 
+You can adjust the extrinsic parameters used to improve the equirectangular image.
 ```
 # Run the camera driver
 ros2 run insta360_ros_driver insta360_ros_driver
