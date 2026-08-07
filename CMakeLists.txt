@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.5)
 project(insta360_ros_driver)
 
+# Add aggressive CPU optimizations
+add_compile_options(-O3 -march=native -ffast-math)
+
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
@@ -15,13 +18,18 @@ find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(imu_tools REQUIRED)
 find_package(OpenCV REQUIRED)
-find_package(PkgConfig REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
+
+find_package(PkgConfig REQUIRED)
+
+set(ENV{PKG_CONFIG_PATH}
+    "$ENV{CONDA_PREFIX}/lib/pkgconfig:$ENV{CONDA_PREFIX}/share/pkgconfig:$ENV{PKG_CONFIG_PATH}"
+)
 pkg_check_modules(AVCODEC REQUIRED libavcodec)
 pkg_check_modules(AVFORMAT REQUIRED libavformat)
 pkg_check_modules(AVUTIL REQUIRED libavutil)
-pkg_search_module(SWSCALE REQUIRED libswscale)
+pkg_check_modules(SWSCALE REQUIRED libswscale)
 
 include_directories(
   include
@@ -81,9 +89,12 @@ target_link_libraries(equirectangular_cpp ${OpenCV_LIBRARIES})
 
 ament_target_dependencies(equirectangular_cpp
   rclcpp
+  sensor_msgs
   cv_bridge
   OpenCV
 )
+
+rclcpp_components_register_node(equirectangular_cpp PLUGIN "EquirectangularNode" EXECUTABLE equirectangular_node)
 
 # Perspective Node
 add_executable(perspective_cpp src/perspective.cpp)

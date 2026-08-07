@@ -1,21 +1,22 @@
 # CHANGES OF THIS FORK
-- Dynamic parameters change works correctly
-- Equirectangular node is now more efficient
-- Perspective node have been added. You can control fov through parameters and camera orientation by publishing to: /&#8288;camera_orientation/&#8288;quaternion
+- Pespective node has been optimized for map generation and eliminate runtime freezing.
+- Equirectangular node: optimized projection memory/speed and correct camera alignment.
+- Dynamic parameters change works correctly (no more hardcoded resolution & decoder type, configure via ROS parameter layer).
 
 # Insta360 ROS2 Jazzy Driver with Pixi Environment
 
-A ROS driver for the Insta360 cameras. This driver is tested on Ubuntu 22.04 with ROS2 Humble. The driver has also been verified on the Insta360 X2 and X3 cameras. The following resolutions are available, all at 30 FPS.
+A ROS driver for the Insta360 cameras. This driver is tested on Ubuntu 24.04 with ROS2 Jazzy on old classic RTX1080Ti. The driver has also been verified on the Insta360 X2 and X3 cameras. The following resolutions are available, all at 30 FPS.
 - 3840 x 1920
 - 2560 x 1280
 - 2304 x 1152
 - 1920 x 960
+- 1152 x 1152 (default)
 
-You can change [this line](https://github.com/avasalya/insta360_ros_driver/blob/65e9cef35152a7af368e8b1f063ce85e8780d2a1/src/main.cpp#L130) to edit the resolution.
+you can update `video_resolution` in parameter config file.
 
-```cpp
-param.video_resolution = ins_camera::VideoResolution::RES_1920_960P30; //Change this line to edit the resolution
-```
+```bash
+ src/insta360_ros_driver/launch/bringup.launch.xml
+ ```
 
 # Installation
 
@@ -24,15 +25,15 @@ To use this driver, you need the latest Insta360 SDK (post-April 23, 2025), whic
 > ⚠️ **Note:** Do not manually clone or build this submodule directly. This package is managed within a `pixi` ecosystem to avoid environment conflicts. Also Please make you use the latest SDK. This package works with the SDK posted after April 23, 2025**
 
 
-Please follow the installation guide in the **[parent repository](https://github.com/avasalya/pixi_insta360_ros2_jazzy_driver)**.
+## Please follow the installation guide in the **[parent repository](https://github.com/avasalya/pixi_insta360_ros2_jazzy_driver)**.
 
 ```bash
 # Clone with submodules
-git clone --recurse-submodules https://github.com/avasalya/pixi_insta360_ros2_jazzy_driver 
+git clone --recurse-submodules https://github.com/avasalya/pixi_insta360_ros2_jazzy_driver
 cd pixi_insta360_ros2_jazzy_driver
 ```
 
-**Add dependencies:** 
+**Add dependencies:**
 Then, the Insta360 libraries need to be installed as follows:
 - add the <code>camera</code> and <code>stream</code> header files inside the <code>include</code> directory
 - add the <code>libCameraSDK.so</code> library under the <code>lib</code> directory.
@@ -43,7 +44,7 @@ Then, the Insta360 libraries need to be installed as follows:
 pixi run -e jazzy360 setup
 ```
 
-# Setup Insta360 Camera 
+# Setup Insta360 Camera
 
 **make sure the camera is set to dual-lens (360°) mode**
 
@@ -72,7 +73,76 @@ sudo chmod 777 /dev/insta
 ```
 
 ## Usage
-The camera provides images natively in H264 compressed image format. We have a decoder node that 
+The camera provides images natively in `H.264` or `H.264_cuvid` compressed image format. We have a decoder node that
+
+## Dynamic Runtime Configurations
+
+The `image_decoder` node supports runtime parameters including setting decoders, allowing you to optimize performance, toggle frame drop thresholds, and hot-swap between software and hardware-accelerated video decoders directly from the XML launch configuration without re-compiling the C++ binaries.
+
+#### this is the current pipeline
+
+```bash
+Compressed H264 (CPU)
+        │
+        ▼
+NVDEC
+        │
+        ▼
+Decoded frame (GPU)
+        │
+        ▼
+av_hwframe_transfer_data()
+        │
+        ▼
+Decoded frame (CPU)
+        │
+        ▼
+sws_scale()
+        │
+        ▼
+bgr_frame_ (CPU)
+        │
+        ▼
+clone()
+        │
+        ▼
+Queue
+        │
+        ▼
+ROS Image
+```
+
+### Configuring the Decoder via Launch File
+
+Open your `bringup.launch.xml` file and locate the `image_decoder` node definition block. You can change your targeted decoder backend by updating the value of the `decoder_name` parameter string:
+
+```xml
+    <!-- Decodes Compressed Images -->
+    <node pkg="insta360_ros_driver" exec="decoder" name="image_decoder" output="log">
+        <param name="compressed_topic" value="/dual_fisheye/image/compressed"/>
+        <param name="uncompressed_topic" value="/dual_fisheye/image"/>
+        <param name="skip_frame" value="2"/>
+        <!-- If you want to minimize the CPU load the most, you can decode only the i-frames. But the expected FPS is about 1-2 FPS -->
+        <param name="i_frame_only" value="false"/>
+        <param name="decoder_name" value="h264"/>
+    </node>
+```
+
+### Supported Decoder Configuration Values
+
+| `decoder_name` String | Performance Mode | Hardware Requirement / Target Platform |
+| :--- | :--- | :--- |
+| **`h264`** | CPU Software Parsing | Stable baseline for all setups; ignores NVDEC packet initialization constraints. |
+| **`h264`** *(Default)*  | GPU NVDEC Accelerated | Requires **NVIDIA Turing Architecture or newer** (RTX 20-series, GTX 16-series, Quadro RTX, Ampere, Ada). *seems to be working on 1080 Ti sometimes, may cause header deadlock loops.* |
+
+### Running the Environment
+
+Once your preferred codec string parameter is updated in the launch file, simply execute the entry target task block within your virtualized Pixi environment container:
+
+```bash
+pixi run -e jazzy360 ros2 launch insta360_ros_driver bringup.launch.xml
+```
+
 
 ### Camera Bringup
 The camera can be brought up with the following launch file
@@ -81,7 +151,7 @@ ros2 launch insta360_ros_driver bringup.launch.xml
 ```
 ![bringup](docs/bringup_rqt.png)
 
-A dual fisheye image will be published.
+#### A dual fisheye image will be published automatically
 
 ![dual_fisheye](docs/dual_fisheye.png)
 
@@ -95,17 +165,53 @@ A dual fisheye image will be published.
 The launch file has the following optional arguments:
 - equirectangular (default="false")
 
-This publishes equirectangular images. You can configure these parameters in `config/equirectangular.yaml`.
-![equirectangular](docs/equirectangular.png)
+This publishes equirectangular images with (front lens as center of the frame). if you want rear lens to be at the center then look for lines.
+```cpp
+// To make front lense appear on the center of the equirectangular image.
+// Shifted by +PI to rotate the panorama 180 degrees horizontally
+float lon = ((float)x / out_width_) * 2.0f * M_PI;
 
-- imu_filter (default="true")
+// To make rear lense appear on the center of the equirectangular image.
+// float lon = ((float)x / out_width_) * 2.0f * M_PI - M_PI;
+```
 
-This uses the [imu_filter_madgwick](https://wiki.ros.org/imu_filter_madgwick) package to approximate orientation from the IMU. Note that by default, we publish `/imu/data_raw` which only contains linear acceleration and angular velocity. The madgwick filter uses this information to publish orientation to `/imu/data`. You can configure the filter in `config/imu_filter.yaml`. 
+in
+
+```bash
+src/insta360_ros_driver/src/equirectangular.cpp
+```
+
+You can configure these parameters in `config/equirectangular.yaml`.
+![equirectangular](docs/equirectangular.jpg)
+
+The launch file has the following optional arguments:
+- perspective (default="false")
+
+#### A Perspective image will be published.
+
+![perspective](docs/perspective.png)
+
+#### Published Topics
+- /camera_orientation/quaternion
+- /dual_fisheye/image
+- /dual_fisheye/image/compressed
+- /imu/data_raw
+- /output
+- /parameter_events
+- /perspective/image
+- /rosout
+
+
+## NOTE [below features are not tested/optimized yet from original source](https://github.com/ai4ce/insta360_ros_driver)
+
+#### imu_filter (default="true")
+
+This uses the [imu_filter_madgwick](https://wiki.ros.org/imu_filter_madgwick) package to approximate orientation from the IMU. Note that by default, we publish `/imu/data_raw` which only contains linear acceleration and angular velocity. The madgwick filter uses this information to publish orientation to `/imu/data`. You can configure the filter in `config/imu_filter.yaml`.
 
 ![IMU](https://github.com/user-attachments/assets/02b50cad-8415-4dde-9014-9ab3a4d415b9)
 
 ## Equirectangular Calibration
-You can adjust the extrinsic parameters used to improve the equirectangular image. 
+You can adjust the extrinsic parameters used to improve the equirectangular image.
 ```
 # Run the camera driver
 ros2 run insta360_ros_driver insta360_ros_driver
@@ -127,12 +233,12 @@ equirectangular_node:
   ros__parameters:
     cx_offset: 0.0
     cy_offset: 0.0
-    crop_size: 960
     translation: [0.0, 0.0, -0.105]
     rotation_deg: [-0.5, 0.0, 1.1]
     gpu: True
-    out_width: 1920
-    out_height: 960
+    out_width: 2304
+    out_height: 1150
+    crop_size: 1150
 ==================================================
 ```
 
@@ -140,7 +246,3 @@ Note that decode.py will most likely drop frames depending on your system. If yo
 ```
 ros2 bag record /dual_fisheye/image /imu/data_raw
 ```
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=ai4ce/insta360_ros_driver&type=Date)](https://star-history.com/#ai4ce/insta360_ros_driver&Date)

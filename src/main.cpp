@@ -23,7 +23,7 @@ public:
     TestStreamDelegate(const std::shared_ptr<rclcpp::Node>& node) : node_(node) {
         // Publisher for the compressed H.264 video stream
         compressed_pub_ = node_->create_publisher<sensor_msgs::msg::CompressedImage>(
-            "/dual_fisheye/image/compressed", 
+            "/dual_fisheye/image/compressed",
             rclcpp::QoS(10)
         );
 
@@ -64,7 +64,7 @@ public:
             msg->angular_velocity.x = gyro.gx;
             msg->angular_velocity.y = gyro.gy;
             msg->angular_velocity.z = gyro.gz;
-            
+
             msg->linear_acceleration.x = gyro.ax * 9.80665;
             msg->linear_acceleration.y = gyro.ay * 9.80665;
             msg->linear_acceleration.z = gyro.az * 9.80665;
@@ -97,11 +97,31 @@ public:
 
     ~CameraWrapper() {
         if (cam) {
+            cam->StopLiveStreaming(); // prevents from hanging on timeout to wait for synchronize" during Open().
             cam->Close();
         }
     }
 
+    ins_camera::VideoResolution StringToVideoResolution(const std::string& res_str) {
+        if (res_str == "RES_3840_1920P30") return ins_camera::VideoResolution::RES_3840_1920P30;
+        if (res_str == "RES_2880_2880P30") return ins_camera::VideoResolution::RES_2880_2880P30;
+        if (res_str == "RES_2560_1280P30") return ins_camera::VideoResolution::RES_2560_1280P30;
+        if (res_str == "RES_1152_1152P30") return ins_camera::VideoResolution::RES_1152_1152P30;
+        if (res_str == "RES_1920_960P30")  return ins_camera::VideoResolution::RES_1920_960P30;
+        if (res_str == "RES_1440_720P30")  return ins_camera::VideoResolution::RES_1440_720P30;
+
+        // Default fallback
+        return ins_camera::VideoResolution::RES_1152_1152P30;
+    }
+
     int run_camera() {
+        // -- 1. declare and fetch ROS2 parameters for video resolution.
+        node_->declare_parameter("video_resolution", "RES_1152_1152P30");
+        node_->declare_parameter("lrv_video_resolution", "RES_1440_720P30");
+
+        std::string video_resolution_str = "RES_1152_1152P30"; // Default resolution
+        std::string lrv_video_resolution_str = "RES_1440_720P30"; // Default resolution
+
         ins_camera::DeviceDiscovery discovery;
         auto list = discovery.GetAvailableDevices();
         if (list.empty()) {
@@ -125,24 +145,25 @@ public:
         uint64_t utc_time = static_cast<uint64_t>(start);
         uint32_t offset_time = 0; //no offset from UTC
 
-        cam->SyncLocalTimeToCamera(utc_time,offset_time);       
+        cam->SyncLocalTimeToCamera(utc_time,offset_time);
+
+        video_resolution_str = node_->get_parameter("video_resolution").as_string();
+        lrv_video_resolution_str = node_->get_parameter("lrv_video_resolution").as_string();
+
         ins_camera::LiveStreamParam param;
-        param.video_resolution = ins_camera::VideoResolution::RES_1920_960P30; //Change this line to edit the resolution
-        //Possible resolutions (results may vary per model) are:
-        //RES_3840_1920P30
-        //RES_2560_1280P30
-        //RES_1152_1152P30 (this will give 2304 x 1152 at 30 FPS)
-        //RES_1920_960P30  
-        param.lrv_video_resulution = ins_camera::VideoResolution::RES_1440_720P30;
+        param.video_resolution = StringToVideoResolution(video_resolution_str);
+        param.lrv_video_reslution = StringToVideoResolution(lrv_video_resolution_str);
         param.video_bitrate = 1024 * 1024 / 2;
         param.enable_audio = false;
         param.using_lrv = false;
 
+        RCLCPP_INFO(node_->get_logger(), "Starting live streaming with updated video resolution: %s and LRV resolution: %s",
+                    video_resolution_str.c_str(), lrv_video_resolution_str.c_str());
         if (!cam->StartLiveStreaming(param)) {
             RCLCPP_ERROR(node_->get_logger(), "Failed to start live streaming.");
             return -1;
         }
-        
+
         RCLCPP_INFO(node_->get_logger(), "Live streaming started.");
         return 0;
     }
@@ -151,13 +172,13 @@ public:
 int main(int argc, char* argv[]) {
     rclcpp::init(argc, argv);
     auto node = rclcpp::Node::make_shared("insta_publisher");
-    
+
     CameraWrapper camera(node);
     if (camera.run_camera() != 0) {
         rclcpp::shutdown();
         return -1;
     }
-    
+
     rclcpp::spin(node);
     rclcpp::shutdown();
     return 0;
