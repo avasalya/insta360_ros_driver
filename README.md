@@ -72,8 +72,24 @@ sudo udevadm trigger
 sudo chmod 777 /dev/insta
 ```
 
-## Usage
+# Usage
 The camera provides images natively in `H.264` or `H.264_cuvid` compressed image format. We have a decoder node that
+
+## CUDA EquiLib projections
+
+Set `equilib:=true` to use the PyTorch/CUDA dual-fisheye stitcher. It subscribes to
+`/dual_fisheye/image`, applies the calibration in `config/equilib.yaml`, publishes
+`/equirectangular/image`, and optionally generates `/perspective/image` with
+[EquiLib](https://github.com/haruishi43/equilib).
+
+```bash
+pixi run -e jazzy360 ros2 launch insta360_ros_driver bringup.launch.xml \
+  equilib:=true equirectangular:=true perspective:=true
+```
+
+Set `gpu: false` in `config/equilib.yaml` to use the CPU path. The `equilib` launch
+mode replaces the legacy C++ equirectangular and perspective nodes, so only one
+projection pipeline runs at a time.
 
 ## Dynamic Runtime Configurations
 

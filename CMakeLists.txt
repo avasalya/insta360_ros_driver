@@ -120,6 +120,7 @@ ament_python_install_package(${PROJECT_NAME})
 install(PROGRAMS
   scripts/equirectangular.py
   scripts/calibrate.py
+  scripts/equilib_stitcher.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

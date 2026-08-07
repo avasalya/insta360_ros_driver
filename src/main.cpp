@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <atomic>
+#include <mutex>
 
 #include <camera/camera.h>
 #include <camera/photography_settings.h>
@@ -91,15 +92,36 @@ class CameraWrapper {
 private:
     std::shared_ptr<ins_camera::Camera> cam;
     std::shared_ptr<rclcpp::Node> node_;
+    std::shared_ptr<ins_camera::StreamDelegate> delegate_;
+    std::mutex camera_mutex_;
+    bool streaming_ = false;
 
 public:
     CameraWrapper(const std::shared_ptr<rclcpp::Node>& node) : node_(node) {}
 
     ~CameraWrapper() {
-        if (cam) {
-            cam->StopLiveStreaming(); // prevents from hanging on timeout to wait for synchronize" during Open().
-            cam->Close();
+        stop_and_close();
+    }
+
+    void stop_and_close() {
+        std::lock_guard<std::mutex> lock(camera_mutex_);
+        if (!cam) {
+            return;
         }
+
+        // The SDK must stop the preview stream before Close(). Otherwise the
+        // camera can retain a live-stream session and time out on the next Open().
+        if (streaming_) {
+            if (!cam->StopLiveStreaming()) {
+                RCLCPP_WARN(node_->get_logger(), "StopLiveStreaming() reported a failure during shutdown");
+            }
+            streaming_ = false;
+        }
+
+        cam->Close();
+        cam.reset();
+        delegate_.reset();
+        RCLCPP_INFO(node_->get_logger(), "Camera stream stopped and camera closed");
     }
 
     ins_camera::VideoResolution StringToVideoResolution(const std::string& res_str) {
@@ -137,8 +159,9 @@ public:
         RCLCPP_INFO(node_->get_logger(), "Camera opened successfully.");
         discovery.FreeDeviceDescriptors(list);
 
-        std::shared_ptr<ins_camera::StreamDelegate> delegate = std::make_shared<TestStreamDelegate>(node_);
-        cam->SetStreamDelegate(delegate);
+        // Keep the delegate alive for the entire CameraSDK streaming session.
+        delegate_ = std::make_shared<TestStreamDelegate>(node_);
+        cam->SetStreamDelegate(delegate_);
 
         auto start = time(NULL);
 
@@ -164,6 +187,7 @@ public:
             return -1;
         }
 
+        streaming_ = true;
         RCLCPP_INFO(node_->get_logger(), "Live streaming started.");
         return 0;
     }
@@ -175,11 +199,15 @@ int main(int argc, char* argv[]) {
 
     CameraWrapper camera(node);
     if (camera.run_camera() != 0) {
+        camera.stop_and_close();
         rclcpp::shutdown();
         return -1;
     }
 
     rclcpp::spin(node);
+    // Do not rely on destructor timing: release the CameraSDK session before
+    // the ROS context and publishers are torn down.
+    camera.stop_and_close();
     rclcpp::shutdown();
     return 0;
 }
