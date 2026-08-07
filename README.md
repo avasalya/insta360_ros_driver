@@ -124,8 +124,7 @@ Open your `bringup.launch.xml` file and locate the `image_decoder` node definiti
         <param name="skip_frame" value="2"/>
         <!-- If you want to minimize the CPU load the most, you can decode only the i-frames. But the expected FPS is about 1-2 FPS -->
         <param name="i_frame_only" value="false"/>
-        <param name="decoder_name" value="h264_cuvid"/>
-        <!-- possile decoder h264_cuvid, h264, hevc?, mjpeg? -->
+        <param name="decoder_name" value="h264"/>
     </node>
 ```
 
@@ -134,7 +133,7 @@ Open your `bringup.launch.xml` file and locate the `image_decoder` node definiti
 | `decoder_name` String | Performance Mode | Hardware Requirement / Target Platform |
 | :--- | :--- | :--- |
 | **`h264`** | CPU Software Parsing | Stable baseline for all setups; ignores NVDEC packet initialization constraints. |
-| **`h264_cuvid`** *(Default)*  | GPU NVDEC Accelerated | Requires **NVIDIA Turing Architecture or newer** (RTX 20-series, GTX 16-series, Quadro RTX, Ampere, Ada). *seems to be working on 1080 Ti sometimes, may cause header deadlock loops.* |
+| **`h264`** *(Default)*  | GPU NVDEC Accelerated | Requires **NVIDIA Turing Architecture or newer** (RTX 20-series, GTX 16-series, Quadro RTX, Ampere, Ada). *seems to be working on 1080 Ti sometimes, may cause header deadlock loops.* |
 
 ### Running the Environment
 
