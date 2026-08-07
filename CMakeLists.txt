@@ -18,13 +18,18 @@ find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(imu_tools REQUIRED)
 find_package(OpenCV REQUIRED)
-find_package(PkgConfig REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
+
+find_package(PkgConfig REQUIRED)
+
+set(ENV{PKG_CONFIG_PATH}
+    "$ENV{CONDA_PREFIX}/lib/pkgconfig:$ENV{CONDA_PREFIX}/share/pkgconfig:$ENV{PKG_CONFIG_PATH}"
+)
 pkg_check_modules(AVCODEC REQUIRED libavcodec)
 pkg_check_modules(AVFORMAT REQUIRED libavformat)
 pkg_check_modules(AVUTIL REQUIRED libavutil)
-pkg_search_module(SWSCALE REQUIRED libswscale)
+pkg_check_modules(SWSCALE REQUIRED libswscale)
 
 include_directories(
   include

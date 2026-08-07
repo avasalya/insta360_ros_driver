@@ -65,7 +65,7 @@ private:
 
         codec_ = avcodec_find_decoder_by_name(decoder_name_.c_str());
         if (!codec_) {
-            RCLCPP_WARN(this->get_logger(), "%s Hardware decoder not available, falling back to software", decoder_name_.c_str());
+            RCLCPP_WARN(this->get_logger(), "Decoder '%s' not found in FFmpeg library registry. Falling back to software.", decoder_name_.c_str());
             hw_type_ = AV_HWDEVICE_TYPE_NONE;
             codec_ = avcodec_find_decoder(AV_CODEC_ID_H264);
             if (!codec_) {
@@ -79,13 +79,20 @@ private:
         if (hw_type_ != AV_HWDEVICE_TYPE_NONE) {
             int err = av_hwdevice_ctx_create(&hw_device_ctx_, hw_type_, nullptr, nullptr, 0);
             if (err < 0) {
-                RCLCPP_WARN(this->get_logger(), "Failed to create hardware device context, falling back to software");
+                char errbuf[128]; // more than AV_ERROR_MAX_STRING_SIZE
+                av_strerror(err, errbuf, sizeof(errbuf));
+                RCLCPP_WARN(this->get_logger(),
+                "av_hwdevice_ctx_create failed (%d): %s",
+                err,
+                errbuf);
                 hw_type_ = AV_HWDEVICE_TYPE_NONE;
                 codec_ = avcodec_find_decoder(AV_CODEC_ID_H264);
                 if (!codec_) {
                     RCLCPP_ERROR(this->get_logger(), "No %s decoder available", decoder_name_.c_str());
                     return;
                 }
+            } else {
+                RCLCPP_INFO(this->get_logger(), "CUDA Hardware Device Context successfully created on GPU 0");
             }
         }
 
@@ -106,11 +113,19 @@ private:
             codec_ctx_->get_format = get_hw_format;
         }
 
+        AVDictionary *opts = nullptr;
+        if(hw_type_ == AV_HWDEVICE_TYPE_CUDA) {
+            av_dict_set(&opts, "gpu", "cuda", 0);
+        }
+
         if (avcodec_open2(codec_ctx_, codec_, nullptr) < 0) {
             RCLCPP_ERROR(this->get_logger(), "Failed to open codec");
+            av_dict_free(&opts);
             CleanupFFmpegDecoder();
             return;
         }
+
+        av_dict_free(&opts);
 
         pkt_ = av_packet_alloc();
         if (!pkt_) {
@@ -317,7 +332,7 @@ public:
         this->declare_parameter("uncompressed_topic", "/dual_fisheye/image");
         this->declare_parameter("skip_frame", 0);
         this->declare_parameter("i_frame_only", false);
-        this->declare_parameter("decoder_name", "h264_cuvid");
+        this->declare_parameter("decoder_name", "h264");
 
         std::string subscribe_topic = this->get_parameter("compressed_topic").as_string();
         std::string publish_topic = this->get_parameter("uncompressed_topic").as_string();

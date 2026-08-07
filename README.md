@@ -77,7 +77,40 @@ The camera provides images natively in `H.264` or `H.264_cuvid` compressed image
 
 ## Dynamic Runtime Configurations
 
-The `image_decoder` node supports runtime parameters, allowing you to optimize performance, toggle frame drop thresholds, and hot-swap between software and hardware-accelerated video decoders directly from the XML launch configuration without re-compiling the C++ binaries.
+The `image_decoder` node supports runtime parameters including setting decoders, allowing you to optimize performance, toggle frame drop thresholds, and hot-swap between software and hardware-accelerated video decoders directly from the XML launch configuration without re-compiling the C++ binaries.
+
+#### this is the current pipeline
+
+```bash
+Compressed H264 (CPU)
+        │
+        ▼
+NVDEC
+        │
+        ▼
+Decoded frame (GPU)
+        │
+        ▼
+av_hwframe_transfer_data()
+        │
+        ▼
+Decoded frame (CPU)
+        │
+        ▼
+sws_scale()
+        │
+        ▼
+bgr_frame_ (CPU)
+        │
+        ▼
+clone()
+        │
+        ▼
+Queue
+        │
+        ▼
+ROS Image
+```
 
 ### Configuring the Decoder via Launch File
 
