@@ -1,3 +1,8 @@
+# UPDATE
+- Python based fast CPUS/GPU-pytorch using [Equilib](https://github.com/haruishi43/equilib) is currently maintained and actively developed here [insta360_ros2_equilib_driver](https://github.com/avasalya/insta360_ros2_equilib_driver/tree/equilib)
+- Please follow the installation guide in the [parent repository](https://github.com/avasalya/pixi_insta360_ros2_jazzy_driver)
+
+
 # CHANGES OF THIS FORK
 - Pespective node has been optimized for map generation and eliminate runtime freezing.
 - Equirectangular node: optimized projection memory/speed and correct camera alignment.
