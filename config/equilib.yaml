@@ -4,8 +4,8 @@ equilib_stitcher:
     cx_offset: 0.0
     cy_offset: 0.0
     crop_size: 1152
-    translation: [0.0, 0.0, -0.105]
-    rotation_deg: [-0.5, 0.0, 1.1]
+    translation: [0.0, 0.0, 0.0]
+    rotation_deg: [0.0, 0.0, 0.0]
 
     # GPU processing. Set false to run the same pipeline on CPU.
     gpu: true

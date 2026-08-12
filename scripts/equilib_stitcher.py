@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""CUDA dual-fisheye stitcher and EquiLib panorama/perspective publisher.
-
-The CameraSDK/FFmpeg decoder publishes a BGR dual-fisheye ``sensor_msgs/Image``.
-This node applies the Insta360-specific lens calibration with a cached Torch
-``grid_sample`` map, then uses EquiLib to rotate the panorama and generate a
-perspective view.
-"""
+"""CUDA dual-fisheye stitcher and EquiLib panorama/perspective publisher."""
 
 from __future__ import annotations
 
@@ -70,7 +64,7 @@ class EquiLibStitcher(Node):
             "equi_roll_deg": 0.0,
             "equi_pitch_deg": 0.0,
             "equi_yaw_deg": 0.0,
-            "fisheye_fov_deg": 204.0,
+            "fisheye_fov_deg": 195.0,
             "publish_equirectangular": True,
             "publish_perspective": False,
             "perspective_width": 1280,
@@ -107,11 +101,6 @@ class EquiLibStitcher(Node):
         )
 
     def _rebuild_stitch_grid(self, source_height: int, source_width: int) -> None:
-        """Build the GPU map from dual-fisheye BGR to equirectangular RGB.
-
-        The geometry deliberately matches the existing C++ stitcher: front lens
-        is stored in the right half of the source image and rear lens in the left.
-        """
         params = self._read_parameters()
         if source_width % 2:
             raise ValueError("dual-fisheye image width must be even")
@@ -126,47 +115,61 @@ class EquiLibStitcher(Node):
         x_offset = (lens_width - crop_size) // 2
         output_height = int(params["out_height"])
         output_width = int(params["out_width"])
+
+        # Create output coordinate meshgrid directly on GPU
         y, x = torch.meshgrid(
             torch.arange(output_height, device=self.device, dtype=torch.float32),
             torch.arange(output_width, device=self.device, dtype=torch.float32),
             indexing="ij",
         )
-        longitude = x / output_width * (2.0 * math.pi)
-        latitude = y / output_height * math.pi - math.pi / 2.0
 
-        # Camera pose correction used by the existing calibrated C++ projector.
-        original_x = torch.cos(latitude) * torch.sin(longitude)
-        x_value = torch.sin(latitude)
-        y_value = -original_x
-        z_value = torch.cos(latitude) * torch.cos(longitude)
-        front = z_value >= 0.0
+        longitude = (x / output_width) * (2.0 * math.pi) - math.pi
+        latitude = (y / output_height) * math.pi - (math.pi / 2.0)
+
+        cos_lat = torch.cos(latitude)
+        sin_lat = torch.sin(latitude)
+        cos_lon = torch.cos(longitude)
+        sin_lon = torch.sin(longitude)
+
+        orig_x = cos_lat * sin_lon
+        orig_y = sin_lat
+
+        x_val = orig_y
+        y_val = -orig_x
+        z_val = cos_lat * cos_lon
+
+        front = z_val >= 0.0
 
         roll, pitch, yaw = [math.radians(value) for value in params["rotation_deg"]]
         rotation = self._rotation_matrix(roll, pitch, yaw)
         translation = torch.tensor(params["translation"], device=self.device, dtype=torch.float32)
 
-        points = torch.stack((x_value, y_value, z_value), dim=-1)
+        points = torch.stack((x_val, y_val, z_val), dim=-1)
         transformed = points @ rotation.T + translation
-        x_value = torch.where(front, x_value, -transformed[..., 0])
-        y_value = torch.where(front, y_value, transformed[..., 1])
-        z_value = torch.where(front, z_value, transformed[..., 2])
 
-        radius = torch.sqrt(x_value.square() + y_value.square()).clamp_min_(1e-6)
-        theta = torch.atan2(radius, z_value.abs())
+        final_x = torch.where(front, x_val, -transformed[..., 0])
+        final_y = torch.where(front, y_val, transformed[..., 1])
+        final_z = torch.where(front, z_val, transformed[..., 2])
+
+        radius = torch.sqrt(final_x.square() + final_y.square()).clamp_min_(1e-6)
+        theta = torch.atan2(radius, final_z.abs())
+
         half_fov = math.radians(float(params["fisheye_fov_deg"])) / 2.0
-        fisheye_radius = theta / half_fov * (crop_size / 2.0)
-        center_x = crop_size / 2.0 + float(params["cx_offset"])
-        center_y = crop_size / 2.0 + float(params["cy_offset"])
-        u = center_x + x_value / radius * fisheye_radius
-        v = center_y + y_value / radius * fisheye_radius
+        fisheye_radius = (theta / half_fov) * (crop_size / 2.0)
 
-        # Undo the per-lens 90 degree rotation and address the original full image.
-        front_x = lens_width + x_offset + (crop_size - 1.0 - v)
-        front_y = y_offset + u
-        back_x = x_offset + v
-        back_y = y_offset + (crop_size - 1.0 - u)
-        source_x = torch.where(front, front_x, back_x)
-        source_y = torch.where(front, front_y, back_y)
+        cx = crop_size / 2.0 + float(params["cx_offset"])
+        cy = crop_size / 2.0 + float(params["cy_offset"])
+        u = cx + (final_x / radius) * fisheye_radius
+        v = cy + (final_y / radius) * fisheye_radius
+
+        # Sensor 90-degree lens rotation integrated into CUDA map
+        rot_u = torch.where(front, (crop_size - 1.0) - v, v)
+        rot_v = torch.where(front, u, (crop_size - 1.0) - u)
+
+        source_x = torch.where(front, lens_width + x_offset + rot_u, x_offset + rot_u)
+        source_y = y_offset + rot_v
+
+        # Correct normalization relative to full source tensor frame
         grid_x = source_x / (source_width - 1) * 2.0 - 1.0
         grid_y = source_y / (source_height - 1) * 2.0 - 1.0
         self.stitch_grid = torch.stack((grid_x, grid_y), dim=-1).unsqueeze(0)
@@ -216,10 +219,11 @@ class EquiLibStitcher(Node):
                 self._rebuild_stitch_grid(source_height, source_width)
             assert self.stitch_grid is not None
 
-            # BGR HWC uint8 -> RGB BCHW float32, then stitch on the selected device.
+            # Stream direct frame into GPU without CPU rotations or slicing
             rgb = np.ascontiguousarray(bgr[..., ::-1])
             source = torch.from_numpy(rgb).to(self.device, non_blocking=True)
             source = source.permute(2, 0, 1).unsqueeze(0).float() / 255.0
+
             panorama = torch_f.grid_sample(
                 source, self.stitch_grid, mode="bilinear", padding_mode="zeros", align_corners=True
             )
